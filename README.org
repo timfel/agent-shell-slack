@@ -1,0 +1,82 @@
+#+title: agent-shell-slack.el
+#+author: Tim Felgentreff
+
+Bridge Slack self-DMs into an active [[https://github.com/xenodium/agent-shell][agent-shell]] buffer.
+
+This package starts a hidden temporary Agent Shell as a Slack monitor.  At the
+configured interval, if the monitor shell is ready, it asks the monitor agent to
+look up the latest Slack self-DM and return:
+
+#+begin_src text
+timestamp: <timestamp>
+<begin_quote>
+<text verbatim>
+</end_quote>
+#+end_src
+
+When the timestamp is newer than the previous seen timestamp,
+=agent-shell-slack-mode= queues the message into the Agent Shell buffer where
+the mode is enabled.
+
+The package intentionally does not call Slack directly.  The selected monitor
+agent is expected to know how to inspect Slack.
+
+* Requirements
+
+- Emacs 29.1 or newer
+- =agent-shell= 0.50.1 or newer
+
+* Usage
+
+In the Agent Shell that should receive Slack requests:
+
+#+begin_src emacs-lisp
+  (require 'agent-shell-slack)
+  (agent-shell-slack)
+#+end_src
+
+or:
+
+#+begin_src emacs-lisp
+  (agent-shell-slack-mode 1)
+#+end_src
+
+Enabling the mode prompts for:
+
+- the monitor agent
+- an optional monitor model id
+- the polling frequency in minutes
+
+Disable polling with:
+
+#+begin_src emacs-lisp
+  (agent-shell-slack-mode -1)
+#+end_src
+
+* Notes
+
+The forwarded request includes the current Emacs server socket name, derived
+from =server-name=, so downstream agents can use =emacsclient --socket-name= to
+inspect other Agent Shell buffers when asked.
+
+Setting the monitor model uses Agent Shell's internal model-setting helper
+because Agent Shell does not currently expose a public noninteractive API for
+choosing a model on a newly-created temporary shell.
+
+* Development
+
+Run tests:
+
+#+begin_src sh
+  make test
+#+end_src
+
+Byte-compile:
+
+#+begin_src sh
+  make compile
+#+end_src
+
+* License
+
+GPL-3.0-or-later.
