@@ -39,7 +39,7 @@
              (regexp-quote "emacsclient --socket-name=/tmp/emacs-server")
              (agent-shell-slack--request-prompt "hello verbatim")))
     (should (string-match-p
-             (regexp-quote "Besides telling me here, also respond via self-DM on Slack.")
+             (regexp-quote "also respond via self-DM on Slack")
              (agent-shell-slack--request-prompt "hello verbatim")))))
 
 (ert-deftest agent-shell-slack-check-prompt-ignores-agent-responses ()
@@ -53,6 +53,12 @@
     (should (string-match-p
              (regexp-quote "no-message")
              prompt))))
+
+(ert-deftest agent-shell-slack-state-is-global ()
+  (with-temp-buffer
+    (should-not (local-variable-p 'agent-shell-slack--target-buffer))
+    (should-not (local-variable-p 'agent-shell-slack--monitor-buffer))
+    (should-not (local-variable-p 'agent-shell-slack--timer))))
 
 (provide 'agent-shell-slack-tests)
 

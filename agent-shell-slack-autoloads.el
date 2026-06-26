@@ -7,12 +7,12 @@
 ;;; Generated autoloads from agent-shell-slack.el
 
 (autoload 'agent-shell-slack-mode "agent-shell-slack" "\
-Forward Slack self-DMs into the current Agent Shell buffer.
+Forward Slack self-DMs into one Agent Shell buffer.
 
 Enabling this mode prompts for a monitor agent, optional model id, and polling
-frequency.  It starts a temporary Agent Shell that periodically checks the
-latest Slack self-DM.  New Slack messages are queued into the current buffer
-with `agent-shell-queue-request'.
+frequency.  It starts a single temporary Agent Shell that periodically checks
+the latest Slack self-DM.  New Slack messages are queued into the Agent Shell
+buffer from which the mode was enabled.
 
 If called interactively, enable Agent-Shell-Slack mode if ARG is
 positive, and disable it if ARG is zero or negative.  If called from

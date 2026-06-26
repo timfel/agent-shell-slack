@@ -3,10 +3,12 @@
 
 Bridge Slack self-DMs into an active [[https://github.com/xenodium/agent-shell][agent-shell]] buffer.
 
-This package starts a hidden temporary Agent Shell as a Slack monitor.  At the
-configured interval, if the monitor shell is ready, it asks the monitor agent to
-look up the latest human-authored Slack self-DM, ignoring assistant/bot/agent
-messages, and return:
+This package provides one global monitor.  It starts a hidden temporary Agent
+Shell as a Slack monitor and forwards new Slack self-DMs into the Agent Shell
+buffer from which =agent-shell-slack-mode= was enabled.  At the configured
+interval, if the monitor shell is ready, it asks the monitor agent to look up
+the latest human-authored Slack self-DM, ignoring assistant/bot/agent messages,
+and return:
 
 #+begin_src text
 timestamp: <timestamp>
@@ -16,8 +18,8 @@ timestamp: <timestamp>
 #+end_src
 
 When the timestamp is newer than the previous seen timestamp,
-=agent-shell-slack-mode= queues the message into the Agent Shell buffer where
-the mode is enabled.
+=agent-shell-slack-mode= queues the message into the selected Agent Shell
+buffer.  Enabling the mode again replaces the existing monitor and target.
 
 The package intentionally does not call Slack directly.  The selected monitor
 agent is expected to know how to inspect Slack.
@@ -53,6 +55,9 @@ Disable polling with:
 #+begin_src emacs-lisp
   (agent-shell-slack-mode -1)
 #+end_src
+
+Only one Slack monitor can be active at a time because
+=agent-shell-slack-mode= is global.
 
 * Notes
 
