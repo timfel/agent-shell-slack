@@ -2,7 +2,7 @@
 
 ;; Copyright (C) 2026 Tim Felgentreff
 
-;; Author: Tim Felgentreff <tim.felgentreff@oracle.com>
+;; Author: Tim Felgentreff <timfelgentreff@gmail.com>
 ;; URL: https://github.com/timfel/agent-shell-slack.el
 ;; Version: 0.1.0
 ;; Package-Requires: ((emacs "29.1") (agent-shell "0.50.1") (shell-maker "0.90.1"))
@@ -24,8 +24,7 @@
 ;;; Commentary:
 
 ;; Poll Slack self-DMs through a temporary Agent Shell and forward new messages
-;; to the single Agent Shell buffer selected when `agent-shell-slack-mode' is
-;; enabled.
+;; into that same shell.
 ;;
 ;; The package intentionally does not know how to call Slack.  It asks the
 ;; monitor agent to inspect Slack and return a timestamp plus quoted text.
@@ -46,11 +45,12 @@
 (defvar agent-shell-slack--monitor-buffer nil)
 (defvar agent-shell-slack--timer nil)
 (defvar agent-shell-slack--subscription nil)
-(defvar agent-shell-slack--target-buffer nil)
+(defvar agent-shell-slack--shell-buffer nil)
 (defvar agent-shell-slack--last-timestamp nil)
 (defvar agent-shell-slack--frequency-minutes nil)
 (defvar agent-shell-slack--model-id nil)
 (defvar agent-shell-slack--model-set-p nil)
+(defvar agent-shell-slack--monitor-prompt-ready nil)
 
 (defconst agent-shell-slack--response-regexp
   (rx "timestamp:" (* blank) (group (+ nonl)) (* space)
@@ -68,12 +68,6 @@
 (declare-function agent-shell-status "agent-shell" (&rest args))
 (declare-function agent-shell-subscribe-to "agent-shell" (&rest args))
 (declare-function agent-shell-unsubscribe "agent-shell" (&rest args))
-(declare-function agent-shell-insert "agent-shell" (&rest args))
-
-(defun agent-shell-slack--ensure-agent-shell ()
-  "Signal unless the current buffer is an Agent Shell buffer."
-  (unless (derived-mode-p 'agent-shell-mode)
-    (user-error "Not in an agent-shell buffer")))
 
 (defun agent-shell-slack--read-frequency ()
   "Read the polling frequency in minutes."
@@ -146,6 +140,10 @@
     (list :timestamp (string-trim (match-string 1 text))
           :text (match-string 2 text))))
 
+(defun agent-shell-slack--message-text-usable-p (text)
+  "Return non-nil when TEXT contains a usable human-authored message."
+  (not (string-empty-p (string-trim (or text "")))))
+
 (defun agent-shell-slack--latest-response (buffer)
   "Return the latest parseable Slack monitor response in BUFFER."
   (when (buffer-live-p buffer)
@@ -168,8 +166,8 @@
               (map-nested-elt agent-shell--state '(:session :id))
               (eq (agent-shell-status :shell-buffer buffer) 'ready)))))
 
-(defun agent-shell-slack--set-monitor-model (target-buffer monitor-buffer)
-  "Apply the requested model to MONITOR-BUFFER for TARGET-BUFFER.
+(defun agent-shell-slack--set-monitor-model (shell-buffer monitor-buffer)
+  "Apply the requested model to MONITOR-BUFFER for SHELL-BUFFER.
 Return non-nil when a model change was started."
   (let ((model-id agent-shell-slack--model-id))
     (when (and (buffer-live-p monitor-buffer)
@@ -182,67 +180,65 @@ Return non-nil when a model change was started."
          :model-id model-id
          :on-success
          (lambda ()
-           (agent-shell-slack--tick target-buffer))
+           (agent-shell-slack--tick shell-buffer))
          :on-failure
          (lambda (error-message _raw-message)
            (message "agent-shell-slack could not set monitor model %s: %s"
                     model-id error-message))))
       t)))
 
-(defun agent-shell-slack--tick (target-buffer)
-  "Ask the Slack monitor for the latest self-DM for TARGET-BUFFER."
-  (when (buffer-live-p target-buffer)
+(defun agent-shell-slack--tick (shell-buffer)
+  "Ask SHELL-BUFFER for the latest Slack self-DM."
+  (when (buffer-live-p shell-buffer)
     (when (and agent-shell-slack-mode
-               (eq target-buffer agent-shell-slack--target-buffer))
-      (let ((monitor agent-shell-slack--monitor-buffer))
-        (when (agent-shell-slack--monitor-ready-p monitor)
-          (unless (agent-shell-slack--set-monitor-model
-                   target-buffer monitor)
-            (with-current-buffer monitor
-              (agent-shell-insert
-               :text (agent-shell-slack--check-prompt)
-               :submit t
-               :shell-buffer monitor))))))))
+               (eq shell-buffer agent-shell-slack--shell-buffer))
+      (when (and agent-shell-slack--monitor-prompt-ready
+                 (agent-shell-slack--monitor-ready-p shell-buffer))
+        (unless (agent-shell-slack--set-monitor-model
+                 shell-buffer shell-buffer)
+          (with-current-buffer shell-buffer
+            (agent-shell-queue-request
+             (agent-shell-slack--check-prompt))))))))
 
-(defun agent-shell-slack--handle-monitor-turn-complete (target-buffer monitor-buffer)
-  "Handle a completed Slack monitor turn for TARGET-BUFFER and MONITOR-BUFFER."
-  (when (and (buffer-live-p target-buffer)
-             (buffer-live-p monitor-buffer))
+(defun agent-shell-slack--handle-monitor-turn-complete (shell-buffer)
+  "Handle a completed Slack monitor turn for SHELL-BUFFER."
+  (when (buffer-live-p shell-buffer)
     (when (and agent-shell-slack-mode
-               (eq target-buffer agent-shell-slack--target-buffer))
+               (eq shell-buffer agent-shell-slack--shell-buffer))
       (when-let* ((response (agent-shell-slack--latest-response
-                             monitor-buffer))
+                             shell-buffer))
                   (timestamp (plist-get response :timestamp))
                   (text (plist-get response :text))
+                  ((agent-shell-slack--message-text-usable-p text))
                   ((agent-shell-slack--newer-timestamp-p
                     timestamp agent-shell-slack--last-timestamp)))
         (setq agent-shell-slack--last-timestamp timestamp)
-        (with-current-buffer target-buffer
+        (with-current-buffer shell-buffer
           (agent-shell-queue-request
            (agent-shell-slack--request-prompt text))
           (message "agent-shell-slack queued Slack self-DM %s in %s"
-                   timestamp (buffer-name target-buffer)))))))
+                   timestamp (buffer-name shell-buffer)))))))
 
-(defun agent-shell-slack--subscribe-monitor (target-buffer monitor-buffer)
-  "Subscribe TARGET-BUFFER to MONITOR-BUFFER completion events."
+(defun agent-shell-slack--subscribe-monitor (shell-buffer)
+  "Subscribe SHELL-BUFFER to its completion events."
   (agent-shell-subscribe-to
-   :shell-buffer monitor-buffer
+   :shell-buffer shell-buffer
    :event 'turn-complete
    :on-event (lambda (_event)
                (agent-shell-slack--handle-monitor-turn-complete
-                target-buffer monitor-buffer))))
+                shell-buffer))))
 
-(defun agent-shell-slack--subscribe-monitor-ready (target-buffer monitor-buffer)
-  "Subscribe TARGET-BUFFER to MONITOR-BUFFER prompt readiness."
+(defun agent-shell-slack--subscribe-monitor-ready (shell-buffer)
+  "Subscribe SHELL-BUFFER to prompt readiness."
   (agent-shell-subscribe-to
-   :shell-buffer monitor-buffer
+   :shell-buffer shell-buffer
    :event 'prompt-ready
    :on-event (lambda (_event)
-               (agent-shell-slack--tick target-buffer))))
+               (setq agent-shell-slack--monitor-prompt-ready t)
+               (agent-shell-slack--tick shell-buffer))))
 
 (defun agent-shell-slack--enable ()
-  "Enable global Slack self-DM polling for the current Agent Shell buffer."
-  (agent-shell-slack--ensure-agent-shell)
+  "Enable global Slack self-DM polling in a temporary Agent Shell buffer."
   (when agent-shell-slack--monitor-buffer
     (agent-shell-slack--disable))
   (let* ((config (or (and (fboundp 'agent-shell--resolve-preferred-config)
@@ -251,33 +247,27 @@ Return non-nil when a model change was started."
                       :prompt "Slack monitor agent: ")))
          (model-id (agent-shell-slack--read-model-id))
          (frequency (agent-shell-slack--read-frequency))
-         (target-buffer (current-buffer))
-         (monitor-buffer (agent-shell-new-temp-shell
-                          :config config
-                          :no-display t)))
-    (setq agent-shell-slack--target-buffer target-buffer
-          agent-shell-slack--monitor-buffer monitor-buffer
+         (shell-buffer (agent-shell-new-temp-shell
+                        :config config
+                        :no-display t)))
+    (setq agent-shell-slack--shell-buffer shell-buffer
+          agent-shell-slack--monitor-buffer shell-buffer
           agent-shell-slack--frequency-minutes frequency
           agent-shell-slack--model-id model-id
           agent-shell-slack--model-set-p nil
+          agent-shell-slack--monitor-prompt-ready nil
           agent-shell-slack--last-timestamp nil)
-    (with-current-buffer monitor-buffer
-      (rename-buffer (generate-new-buffer-name
-                      (format " *agent-shell slack monitor: %s*"
-                              (buffer-name target-buffer)))))
     (setq agent-shell-slack--subscription
           (list
-           (agent-shell-slack--subscribe-monitor
-            target-buffer monitor-buffer)
-           (agent-shell-slack--subscribe-monitor-ready
-            target-buffer monitor-buffer)))
+           (agent-shell-slack--subscribe-monitor shell-buffer)
+           (agent-shell-slack--subscribe-monitor-ready shell-buffer)))
     (setq agent-shell-slack--timer
           (run-at-time
            (* 60 frequency) (* 60 frequency)
-           #'agent-shell-slack--tick target-buffer))
-    (run-at-time 3 nil #'agent-shell-slack--tick target-buffer)
-    (message "agent-shell-slack enabled in %s; monitor %s every %s minutes"
-             (buffer-name target-buffer) (buffer-name monitor-buffer)
+           #'agent-shell-slack--tick shell-buffer))
+    (run-at-time 3 nil #'agent-shell-slack--tick shell-buffer)
+    (message "agent-shell-slack enabled; using %s every %s minutes"
+             (buffer-name shell-buffer)
              frequency)))
 
 (defun agent-shell-slack--disable ()
@@ -294,9 +284,10 @@ Return non-nil when a model change was started."
   (when (buffer-live-p agent-shell-slack--monitor-buffer)
     (kill-buffer agent-shell-slack--monitor-buffer))
   (setq agent-shell-slack--monitor-buffer nil
-        agent-shell-slack--target-buffer nil
+        agent-shell-slack--shell-buffer nil
         agent-shell-slack--last-timestamp nil
         agent-shell-slack--model-set-p nil
+        agent-shell-slack--monitor-prompt-ready nil
         agent-shell-slack--frequency-minutes nil
         agent-shell-slack--model-id nil))
 
@@ -306,8 +297,8 @@ Return non-nil when a model change was started."
 
 Enabling this mode prompts for a monitor agent, optional model id, and polling
 frequency.  It starts a single temporary Agent Shell that periodically checks
-the latest Slack self-DM.  New Slack messages are queued into the Agent Shell
-buffer from which the mode was enabled."
+the latest Slack self-DM.  New Slack messages are queued into that temporary
+Agent Shell."
   :global t
   :lighter " Slack"
   :group 'agent-shell
