@@ -96,13 +96,16 @@
 (defun agent-shell-slack--check-prompt ()
   "Return the prompt sent to the Slack monitor agent."
   (concat
-   "Look for the latest Slack self-DM and respond with only the timestamp "
-   "and the message text in this exact format:\n\n"
+   "Look for the latest Slack self-DM authored by the human user. Ignore "
+   "messages sent by assistants, agents, bots, apps, or yourself, including "
+   "Slack self-DM responses from this bridge. Respond with only the timestamp "
+   "and the human-authored message text in this exact format:\n\n"
    "timestamp: <timestamp>\n"
    "<begin_quote>\n"
    "<text verbatim>\n"
    "</end_quote>\n\n"
-   "Do not add commentary before or after this format."))
+   "If there is no human-authored self-DM, respond exactly: no-message\n"
+   "Do not add commentary before or after the requested format."))
 
 (defun agent-shell-slack--request-prompt (message-text)
   "Return the target agent request for Slack MESSAGE-TEXT."
@@ -112,7 +115,7 @@
     "You can use emacsclient --socket-name=%s to look for other agent shells "
     "and identify them by their name, working directory, or git branch, if "
     "the user asks about other agent shells.\n\n"
-    "Besides telling me here, also respond via self-DM on Slack.")
+    "Besides telling me here, also respond via self-DM on Slack, prefixed with the robot emoji 🤖.")
    message-text
    (agent-shell-slack--socket-name)))
 

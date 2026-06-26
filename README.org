@@ -5,7 +5,8 @@ Bridge Slack self-DMs into an active [[https://github.com/xenodium/agent-shell][
 
 This package starts a hidden temporary Agent Shell as a Slack monitor.  At the
 configured interval, if the monitor shell is ready, it asks the monitor agent to
-look up the latest Slack self-DM and return:
+look up the latest human-authored Slack self-DM, ignoring assistant/bot/agent
+messages, and return:
 
 #+begin_src text
 timestamp: <timestamp>

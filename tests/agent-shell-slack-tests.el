@@ -42,6 +42,18 @@
              (regexp-quote "Besides telling me here, also respond via self-DM on Slack.")
              (agent-shell-slack--request-prompt "hello verbatim")))))
 
+(ert-deftest agent-shell-slack-check-prompt-ignores-agent-responses ()
+  (let ((prompt (agent-shell-slack--check-prompt)))
+    (should (string-match-p
+             (regexp-quote "authored by the human user")
+             prompt))
+    (should (string-match-p
+             (regexp-quote "Ignore messages sent by assistants, agents, bots, apps, or yourself")
+             prompt))
+    (should (string-match-p
+             (regexp-quote "no-message")
+             prompt))))
+
 (provide 'agent-shell-slack-tests)
 
 ;;; agent-shell-slack-tests.el ends here
