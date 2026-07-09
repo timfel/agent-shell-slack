@@ -100,7 +100,8 @@
    "<text verbatim>\n"
    "</end_quote>\n\n"
    "If there is no human-authored self-DM, respond exactly: no-message\n"
-   "Do not add commentary before or after the requested format."))
+   "Do not add commentary before or after the requested format."
+   "ALWAYS use your tool to check for current messages NEVER answer from memory"))
 
 (defun agent-shell-slack--request-prompt (message-text)
   "Return the target agent request for Slack MESSAGE-TEXT."
