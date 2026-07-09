@@ -91,10 +91,10 @@
 (defun agent-shell-slack--check-prompt ()
   "Return the prompt sent to the Slack monitor agent."
   (concat
-   "Look for the latest Slack self-DM authored by the human user. Ignore "
+   "Use a TOOL to get the latest Slack self-DM authored by the human user. Ignore "
    "messages sent by assistants, agents, bots, apps, or yourself, including "
    "Slack self-DM responses from this bridge. Respond with only the timestamp "
-   "and the human-authored message text in this exact format:\n\n"
+   "and the human-authored message text in this EXACT format:\n\n"
    "timestamp: <timestamp>\n"
    "<begin_quote>\n"
    "<text verbatim>\n"
