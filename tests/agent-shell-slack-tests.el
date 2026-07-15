@@ -10,6 +10,14 @@
 
 (require 'ert)
 (require 'cl-lib)
+
+;; Allow byte compilation when Emacs only adds this tests directory to `load-path'.
+(eval-and-compile
+  (let ((package-root
+         (locate-dominating-file default-directory "agent-shell-slack.el")))
+    (when package-root
+      (add-to-list 'load-path package-root))))
+
 (require 'agent-shell-slack)
 
 (ert-deftest agent-shell-slack-parse-response ()
