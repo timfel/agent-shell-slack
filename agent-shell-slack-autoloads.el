@@ -2,6 +2,12 @@
 ;;
 ;;; Code:
 
+(add-to-list 'load-path
+             (or (and load-file-name
+                      (directory-file-name
+                       (file-name-directory load-file-name)))
+                 (car load-path)))
+
 ;;;### (autoloads nil "agent-shell-slack" "agent-shell-slack.el"
 ;;;;;;  (0 0 0 0))
 ;;; Generated autoloads from agent-shell-slack.el
